@@ -1,4 +1,3 @@
-```groovy
 pipeline {
     agent {
         docker {
@@ -9,32 +8,11 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                sh '''
-                    echo "===== CHECKOUT ====="
-
-                    git config --global --add safe.directory "$WORKSPACE"
-
-                    echo "Workspace:"
-                    pwd
-
-                    echo "Git status:"
-                    git status
-
-                    echo "Files:"
-                    ls -ltr
-                '''
-            }
-        }
-
         stage('Build and Test') {
             steps {
                 sh '''
-                    echo "===== BUILD AND TEST ====="
-
+                    echo "===== Build and Test ====="
                     cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
-
                     mvn clean package
                 '''
             }
@@ -53,7 +31,7 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        echo "===== SONARQUBE ANALYSIS ====="
+                        echo "===== SonarQube Analysis ====="
 
                         cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
 
@@ -72,16 +50,13 @@ pipeline {
 
             steps {
                 script {
-
                     sh '''
-                        echo "===== DOCKER BUILD ====="
+                        echo "===== Docker Build ====="
 
                         cd java-maven-sonar-argocd-helm-k8s/spring-boot-app
 
                         docker build -t "$DOCKER_IMAGE" .
                     '''
-
-                    echo "===== DOCKER PUSH ====="
 
                     def dockerImage = docker.image("${DOCKER_IMAGE}")
 
@@ -108,120 +83,46 @@ pipeline {
                         variable: 'GITHUB_TOKEN'
                     )
                 ]) {
-
                     sh '''
                         set -e
 
-                        echo "===== UPDATE DEPLOYMENT FILE ====="
+                        echo "===== Configure Git ====="
 
-                        # Allow Git to work with the Jenkins workspace
                         git config --global --add safe.directory "$WORKSPACE"
-
-                        echo "Current workspace:"
-                        pwd
-
-                        echo "Current Git branch:"
-                        git branch --show-current
-
-                        echo "Current Git status:"
-                        git status
-
-                        echo "===== CONFIGURE GIT ====="
 
                         git config user.email "pmahendra9012@gmail.com"
                         git config user.name "Peravali Mahendra"
 
-                        echo "===== UPDATE IMAGE TAG ====="
+                        echo "===== Git Status ====="
+
+                        git status
+
+                        echo "===== Updating deployment.yml ====="
 
                         sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" \
                             java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
 
-                        echo "===== UPDATED DEPLOYMENT FILE ====="
+                        echo "===== Check Changes ====="
 
-                        cat java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-
-                        echo "===== GIT STATUS ====="
-
-                        git status
-
-                        echo "===== GIT ADD ====="
+                        git diff -- \
+                            java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
 
                         git add \
                             java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
 
-                        echo "===== GIT COMMIT ====="
-
                         git commit \
-                            -m "Update deployment image to version ${BUILD_NUMBER}"
+                            -m "Update deployment image to version ${BUILD_NUMBER}" || true
 
-                        echo "===== GIT PUSH ====="
+                        echo "===== Git Push ====="
 
                         git push \
                             "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" \
                             HEAD:main
 
-                        echo "===== DEPLOYMENT FILE PUSHED SUCCESSFULLY ====="
+                        echo "===== Deployment update successful ====="
                     '''
                 }
             }
         }
     }
-}
-```
-
-    stage('Update Deployment File') {
-      environment {
-        GIT_REPO_NAME = "Jenkins-Zero-To-Hero"
-        GIT_USER_NAME = "PMahendra-MS"
-      }
-
-      steps {
-        withCredentials([
-          string(
-            credentialsId: 'github',
-            variable: 'GITHUB_TOKEN'
-          )
-        ]) {
-
-          sh '''
-            set -e
-
-            echo "===== Checking Git Repository ====="
-            pwd
-            git status
-
-            echo "===== Configuring Git ====="
-            git config user.email "pmahendra9012@gmail.com"
-            git config user.name "Peravali Mahendra"
-
-            echo "===== Updating Deployment File ====="
-
-            sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" \
-              java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-
-            echo "===== Deployment File ====="
-
-            cat java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-
-            echo "===== Git Status ====="
-
-            git status
-
-            git add \
-              java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-
-            git commit \
-              -m "Update deployment image to version ${BUILD_NUMBER}"
-
-            echo "===== Pushing Changes to GitHub ====="
-
-            git push \
-              https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git \
-              HEAD:main
-          '''
-        }
-      }
-    }
-
-  }
 }
